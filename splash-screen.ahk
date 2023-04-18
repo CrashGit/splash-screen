@@ -1,42 +1,48 @@
 SetWinDelay(-1)
 
-; CHANGE ME
-splashScreenText := 'Crash'
 
-
-
-SplashScreenGui := Gui('+AlwaysOnTop +ToolWindow -SysMenu -Caption -Border +E0x20')
-SplashScreenGui.BackColor := '000000'
-SplashScreenGui.SetFont('s17 bold', 'Segoe UI')
-SplashScreenGui.AddText(, splashScreenText) ; invisible splash text as a reference to center the animated letters horizontally
-SplashScreenGui.Show('xCenter y0 AutoSize NoActivate')
-WinSetTransColor('000000', SplashScreenGui)
-
-
-; very strange issue where if string length is evenly divisible by 7,
-; the colors stop changing, so this adds extra blanks to the side
-; to fix it while keeping it centered
-if Mod(StrLen(splashScreenText), 7) = 0
-    splashScreenText := ' ' splashScreenText ' '
+; can't figure out why, but calling the function shortly after
+; just having called it causes it to bug out
 
 
 ; using a timer here to start a new thread because I was getting undefined
 ; variables if I tried certain commands too soon after restarting the main() script
 ; because it wasn't finished running so variables wouldn't get assigned fast enough
 ; if you #Include this script in another script, I recommend keeping this
-SetTimer(LoopSplashText, -10)
+SetTimer(() => LoopSplashText('welcome'), -100)   ; remove if you don't want it on script start
 
 
-LoopSplashText() {
+
+; assign a hotkey, or just call it under some other condition
+LoopSplashText(splashScreenText := 'welcome') {
+    if BouncingText.bouncingText_is_in_use
+        return
+
+    ; very strange issue where if string length is evenly divisible by 7,
+    ; the colors stop changing, so this adds extra blanks to the side
+    ; to fix it while keeping it centered
+    if Mod(StrLen(splashScreenText), 7) = 0
+        splashScreenText := ' ' splashScreenText ' '
+
+    global SplashScreenGui := Gui('+AlwaysOnTop +ToolWindow -SysMenu -Caption -Border +E0x20')
+    SplashScreenGui.BackColor := '000000'
+    SplashScreenGui.SetFont('s17 bold', 'Segoe UI')
+    SplashScreenGui.AddText(, splashScreenText) ; invisible splash text as a reference to center the animated letters horizontally
+    SplashScreenGui.Show('xCenter y0 AutoSize NoActivate')
+    WinSetTransColor(SplashScreenGui.BackColor, SplashScreenGui)
+
     loop parse splashScreenText {
-        BouncingText(A_LoopField, A_Index).Initialize()
+        BouncingText(A_LoopField, A_Index, splashScreenText).Initialize()
         Sleep(300)
     }
 }
 
 
+
 class BouncingText
 {
+    static bouncingText_is_in_use := false
+
     __Init()
     {
         ; splash text colors
@@ -47,13 +53,11 @@ class BouncingText
         this.purple := 'cb696f5'
         this.white  := 'cf0f0f0'
         this.orange := 'cffd975'
-        this.rgb    := [pink, blue, green, yellow, purple, white, orange]
+        this.rgb    := [this.pink, this.blue, this.green, this.yellow, this.purple, this.white, this.orange]
 
         ; variables
         this.acceleration   := 1
         this.deceleration   := unset
-        this.count          := StrLen(splashScreenText)
-        this.destroyTime    := (this.count*300) + 1000
         this.final_position := A_ScreenHeight / 2
         this.bounce_apex    := A_ScreenHeight / 4
 
@@ -65,15 +69,21 @@ class BouncingText
         this.coloring       := ObjBindMethod(this, 'ColorText')
     }
 
-    __New(_letter, _letterIndex)
+    __New(_letter, _letterIndex, _text)
     {
         this.splashScreenLetter := _letter
         this.letterIndex        := _letterIndex
+        this.count              := StrLen(_text)
+        this.destroyTime        := (this.count*300) + 1000
     }
 
+    __Delete() {
+
+    }
 
     Initialize()
     {
+        BouncingText.bouncingText_is_in_use := true
         try {
             if this.letterIndex > 1 {
                 SplashScreenGui.AddText('x+0' ' vletter' this.letterIndex, this.splashScreenLetter)
@@ -138,15 +148,18 @@ class BouncingText
     DestroyBouncingText()
     {
         if IsSet(SplashScreenGui) {
-            SplashScreenGui.Destroy()
-            global SplashScreenGui := unset
+            SplashScreenGui.Hide()
+
             SetTimer(this.falling, 0)
             SetTimer(this.bouncing, 0)
             SetTimer(this.coloring, 0)
+
             this.bouncing := unset
             this.destroy  := unset
             this.falling  := unset
             this.coloring := unset
+
+            BouncingText.bouncingText_is_in_use := false
         }
     }
 
@@ -166,8 +179,7 @@ class BouncingText
             if color > this.rgb.Length
                 colorIndex := 1
 
-            else
-                colorIndex++
+            else colorIndex++
 
             return colorIndex
         }
